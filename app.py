@@ -2,6 +2,7 @@
 # 🚀 Auto Insights — V5 (Storytelling + Scalable + Beautiful)
 # Python 3.11+ compatible
 
+import csv
 import os
 import io
 import zipfile
@@ -562,11 +563,20 @@ with tabs[4]:
         buf.seek(0)
         st.download_button("📊 Download Insights (Excel)", buf, file_name="insights.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    with colC:
-        # Narratives export
-        narr_csv = "Title,Text\n" + "\n".join([f"\"{t}\",\"{x.replace('\"','''')}\"" for t,x in st.session_state["narratives"]])
-        st.download_button("📝 Download Narratives (CSV)", narr_csv.encode("utf-8"), file_name="narratives.csv", mime="text/csv")
-    st.markdown("</div>", unsafe_allow_html=True)
+with colC:
+    import io
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Title", "Text"])
+    for t, x in st.session_state.get("narratives", []):
+        w.writerow([t, x])
+    csv_bytes = buf.getvalue().encode("utf-8")
+    st.download_button(
+        "📝 Download Narratives (CSV)",
+        csv_bytes,
+        file_name="narratives.csv",
+        mime="text/csv"
+    )
 
 # ---------------------------- PDF Report (Narratives + Thumbnails) ----------------------------
 with st.container():
