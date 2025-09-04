@@ -1,5 +1,6 @@
+
 # app.py
-# 🚀 Auto Insights — V5 (Storytelling + Scalable + Beautiful)
+# 🚀 Auto Insights – V6 (Storytelling + Scalable + White Theme + Exports)
 # Python 3.11+ compatible
 
 import os
@@ -19,31 +20,26 @@ from plotly.io import to_image
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.feature_selection import mutual_info_regression
 from sklearn.linear_model import LinearRegression
+import csv as csv_module
 
 # ---------------------------- Page & Theme ----------------------------
 st.set_page_config(page_title="Auto Insights – CE Innovations Lab", page_icon="🚀", layout="wide")
 
-# Light theme styling
+# White theme styling
 st.markdown("""
 <style>
-.stApp {
-  background: #ffffff;  /* Pure white background */
-  color: #1f2937;       /* Neutral dark gray text */
-}
-
-/* Glass cards on white background */
+.stApp { background: #ffffff; color: #1f2937; }
+.block-container { padding-top: 1.1rem; }
 .glass {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.98);
   border: 1px solid rgba(0, 0, 0, 0.08);
   box-shadow: 0 4px 12px rgba(0,0,0,0.08);
   border-radius: 12px;
   padding: 1rem 1.2rem;
   margin-bottom: 1rem;
 }
-
-/* KPI cards */
 .kpi {
-  background: rgba(249,250,251,0.9);
+  background: rgba(249,250,251,0.98);
   border: 1px solid rgba(0,0,0,0.06);
   border-radius: 12px;
   padding: 0.8rem 1rem;
@@ -51,22 +47,19 @@ st.markdown("""
 }
 .kpi h3 { margin: 0; font-size: 0.9rem; color: #6b7280; }
 .kpi p { margin: 0; font-size: 1.3rem; font-weight: 700; color: #111827; }
-
-/* Footer */
+.smallnote { color: #6b7280; font-size: 0.9rem; }
 footer {visibility: hidden;}
 #custom-footer {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999;
-  background: rgba(255,255,255,0.9);
+  position: fixed; left:0; right:0; bottom:0; z-index: 9999;
+  background: rgba(255,255,255,0.95);
   border-top: 1px solid rgba(0,0,0,0.08);
   color: #374151;
   padding: 8px 16px; text-align: center; font-size: 0.9rem;
 }
-.smallnote { color: #6b7280; font-size: 0.9rem; }
 hr { border-color: rgba(0,0,0,0.1); }
 </style>
 <div id="custom-footer">Developed by <b>CE Innovations Lab 2025</b></div>
 """, unsafe_allow_html=True)
-
 
 # ---------------------------- Session Helpers ----------------------------
 if "charts_png" not in st.session_state:
@@ -109,8 +102,7 @@ def load_file_to_polars(uploaded_file, try_parse_dates: bool = True) -> Tuple[pl
                 sample = df_pl[c].head(200).to_list()
                 hits = 0
                 for s in sample:
-                    if s is None:
-                        continue
+                    if s is None: continue
                     try:
                         pd.to_datetime(s)
                         hits += 1
@@ -123,7 +115,8 @@ def load_file_to_polars(uploaded_file, try_parse_dates: bool = True) -> Tuple[pl
                         pass
 
     parquet_path = _to_parquet(df_pl)
-    # Keep a lightweight pandas copy only for plotting libs that require pandas
+
+    # lightweight pandas copy for plotting
     df_pd = df_pl.to_pandas()
     return df_pl, df_pd, parquet_path
 
@@ -157,7 +150,7 @@ def zip_all_charts() -> bytes:
     mem.seek(0)
     return mem.read()
 
-# ---------------------------- Analytics & Narratives ----------------------------
+# ---------------------------- Analytics & Executive Narratives ----------------------------
 def basic_stats_numeric(series: pd.Series) -> Dict[str, float]:
     s = series.dropna()
     if s.empty: return {}
@@ -176,66 +169,113 @@ def basic_stats_numeric(series: pd.Series) -> Dict[str, float]:
         "out_pct": out_pct
     }
 
-def hist_narrative(df_pd: pd.DataFrame, col: str) -> str:
-    stats = basic_stats_numeric(df_pd[col])
-    if not stats: return "No numeric data available."
-    skew_txt = "positively skewed" if stats["skew"] > 0.5 else "negatively skewed" if stats["skew"] < -0.5 else "fairly symmetric"
+def narrative_histogram(df_pd: pd.DataFrame, col: str) -> str:
+    s = df_pd[col].dropna()
+    if s.empty: return "No numeric data available."
+    q1, q3 = np.percentile(s, [25, 75]); iqr = max(q3-q1, 1e-9)
+    out_pct = ((s < q1-1.5*iqr) | (s > q3+1.5*iqr)).mean()*100
+    skew = pd.Series(s).skew()
+    skew_txt = "right-skewed (long high tail)" if skew > 0.5 else "left-skewed (long low tail)" if skew < -0.5 else "fairly symmetric"
     return (
-        f"Range {stats['min']:.2f}–{stats['max']:.2f}, mean {stats['mean']:.2f}, median {stats['median']:.2f}. "
-        f"Distribution appears {skew_txt}. ~{stats['out_pct']:.1f}% potential outliers."
+        f"**What:** {col} is {skew_txt}, median {np.median(s):.2f}. "
+        f"**Why it matters:** ~{out_pct:.1f}% outliers can distort averages. "
+        f"**Action:** Use median/IQR; investigate outliers. "
+        f"**Impact:** More robust targets and fair benchmarking."
     )
 
-def box_narrative(df_pd: pd.DataFrame, col: str) -> str:
-    stats = basic_stats_numeric(df_pd[col])
-    if not stats: return "No numeric data available."
-    return f"Variation (std {stats['std']:.2f}) with ~{stats['out_pct']:.1f}% outliers; check process stability and data quality."
+def narrative_box(df_pd: pd.DataFrame, col: str) -> str:
+    s = df_pd[col].dropna()
+    if s.empty: return "No numeric data available."
+    return (
+        f"**What:** {col} shows spread (IQR≈{np.percentile(s,75)-np.percentile(s,25):.2f}) with outliers present. "
+        f"**Why:** High variance implies inconsistent process. "
+        f"**Action:** Standardize inputs; isolate outlier sources. "
+        f"**Impact:** Reduced variability and predictable performance."
+    )
 
-def bar_narrative(df_pd: pd.DataFrame, cat_col: str, val_col: Optional[str], agg: str) -> str:
-    if val_col is None:
-        counts = df_pd[cat_col].value_counts(dropna=False)
-        if counts.empty: return "No categories present."
-        top = counts.iloc[:3]
-        conc = 100 * counts.iloc[0] / counts.sum()
-        return f"Top categories: {', '.join([f'{idx} ({val})' for idx, val in top.items()])}. Concentration at top: {conc:.1f}%."
-    else:
-        grouped = df_pd.groupby(cat_col)[val_col].agg(agg).sort_values(ascending=False)
-        if grouped.empty: return "No values to aggregate."
-        top3 = grouped.iloc[:3]
-        gap = float(top3.iloc[0] - top3.iloc[1]) if len(top3) > 1 else 0.0
-        return f"Leading segments: {', '.join([f'{idx} ({val:.2f})' for idx, val in top3.items()])}. Gap leader→runner-up: {gap:.2f}."
+def narrative_bar_count(df_pd: pd.DataFrame, cat: str) -> str:
+    counts = df_pd[cat].value_counts(dropna=False)
+    if counts.empty: return "No categories present."
+    top = counts.head(3)
+    conc = 100 * counts.iloc[0] / counts.sum()
+    return (
+        f"**What:** '{cat}' is concentrated—top segment '{top.index[0]}' = {int(counts.iloc[0])} rows ({conc:.1f}%). "
+        f"**Why:** Decisions on dominant segments have outsized effect. "
+        f"**Action:** Prioritize top 1–2 segments for initiatives. "
+        f"**Impact:** Faster lift with minimal scope creep."
+    )
 
-def line_narrative(df_pd: pd.DataFrame, tcol: str, vcol: str) -> str:
-    dfp = df_pd[[tcol, vcol]].dropna().copy()
-    dfp[tcol] = pd.to_datetime(dfp[tcol], errors="coerce")
-    dfp = dfp.dropna().sort_values(tcol)
-    if dfp.empty or len(dfp) < 3: return "Insufficient time points."
-    x = (dfp[tcol] - dfp[tcol].min()).dt.total_seconds().values.reshape(-1, 1)
-    y = dfp[vcol].values
+def narrative_bar_agg(df_pd: pd.DataFrame, cat: str, val: str, agg: str) -> str:
+    g = df_pd.groupby(cat)[val].agg(agg).sort_values(ascending=False)
+    if g.empty: return "No values to aggregate."
+    lead = g.index[0]; lead_val = g.iloc[0]
+    runner = g.index[1] if len(g)>1 else None
+    gap = (lead_val - g.iloc[1]) if runner is not None else 0.0
+    return (
+        f"**What:** {agg}({val}) peaks at '{lead}' ({lead_val:.2f}). "
+        f"**Why:** This segment is your benchmark. "
+        f"**Action:** Replicate '{lead}' practices across next 2–3 segments. "
+        f"**Impact:** Closing leader→runner gap of {gap:.2f} yields immediate uplift."
+    )
+
+def narrative_line(df_pd: pd.DataFrame, tcol: str, vcol: str) -> str:
+    d = df_pd[[tcol, vcol]].dropna().copy()
+    d[tcol] = pd.to_datetime(d[tcol], errors="coerce")
+    d = d.dropna().sort_values(tcol)
+    if len(d) < 3: return "Insufficient time points."
+    x = (d[tcol]-d[tcol].min()).dt.total_seconds().values.reshape(-1,1)
+    y = d[vcol].values
     lr = LinearRegression().fit(x, y)
-    slope = lr.coef_[0]
-    direction = "upward" if slope > 0 else "downward"
-    vol = pd.Series(y).pct_change().std() * 100 if len(y) > 2 else 0.0
-    delta = y[-1] - y[0]
-    return f"{direction} trend (Δ={delta:.2f}) with volatility ~{vol:.1f}%."
+    slope = lr.coef_[0]; delta = y[-1]-y[0]
+    direction = "uptrend" if slope>0 else "downtrend"
+    vol = pd.Series(y).pct_change().std()*100 if len(y)>2 else 0.0
+    return (
+        f"**What:** {vcol} shows a {direction} (Δ={delta:.2f}) with ~{vol:.1f}% volatility. "
+        f"**Why:** Volatility hides real movement. "
+        f"**Action:** Smooth with 7-period MA; act on trend not noise. "
+        f"**Impact:** Better timing for interventions."
+    )
 
-def scatter_narrative(df_pd: pd.DataFrame, x: str, y: str) -> str:
-    sub = df_pd[[x, y]].dropna()
-    if sub.empty or len(sub) < 3: return "Insufficient points."
+def narrative_scatter(df_pd: pd.DataFrame, x: str, y: str) -> str:
+    sub = df_pd[[x,y]].dropna()
+    if len(sub) < 3: return "Insufficient points."
     r = float(sub.corr().iloc[0,1])
-    strength = "strong" if abs(r) >= 0.7 else "moderate" if abs(r) >= 0.4 else "weak"
-    return f"{strength} correlation (r={r:.2f}). Inspect non-linearity & outliers before causal claims."
+    strength = "strong" if abs(r)>=0.7 else "moderate" if abs(r)>=0.4 else "weak"
+    direction = "positive" if r>=0 else "negative"
+    return (
+        f"**What:** {strength} {direction} association (r={r:.2f}) between {x} and {y}. "
+        f"**Why:** Changes in {x} likely move {y} in the same/opposite direction. "
+        f"**Action:** Test causality with controls; monitor paired targets. "
+        f"**Impact:** Focus on the lever ({x}) to steer {y}."
+    )
 
-def corr_matrix(df_pd: pd.DataFrame, numeric_cols: List[str]) -> Tuple[pd.DataFrame, str]:
+def corr_top_pairs(df_pd: pd.DataFrame, numeric_cols: List[str], k: int = 3):
     if len(numeric_cols) < 2:
-        return pd.DataFrame(), "Not enough numeric columns for correlation."
+        return None, "Not enough numeric columns for correlation."
+
     corr = df_pd[numeric_cols].corr()
-    flat = corr.unstack().dropna()
-    flat = flat[flat.index.get_level_values(0) != flat.index.get_level_values(1)]
-    if flat.empty: return corr, "No meaningful correlations detected."
-    top_pos = flat.sort_values(ascending=False).head(3)
-    top_neg = flat.sort_values(ascending=True).head(3)
-    msg = "Top relationships: " + "; ".join([f"{a}~{b} (+{v:.2f})" for (a,b),v in top_pos.items()]) + \
-          " | " + "Most negative: " + "; ".join([f"{a}~{b} ({v:.2f})" for (a,b),v in top_neg.items()])
+    # Upper triangle only, exclude diagonal
+    mask = np.triu(np.ones_like(corr, dtype=bool), k=1)
+    pairs = []
+    for i, a in enumerate(corr.columns):
+        for j, b in enumerate(corr.columns):
+            if mask[i, j] and not np.isnan(corr.iloc[i, j]):
+                pairs.append((a, b, float(corr.iloc[i, j])))
+
+    if not pairs:
+        return corr, "No meaningful correlations detected."
+
+    sorted_pairs = sorted(pairs, key=lambda t: t[2], reverse=True)
+    top_pos = [p for p in sorted_pairs if p[2] > 0][:k]
+    top_neg = [p for p in sorted_pairs[::-1] if p[2] < 0][:k]
+
+    pos_txt = "; ".join([f"{a} ↗ {b} (+{v:.2f})" for a, b, v in top_pos]) if top_pos else "—"
+    neg_txt = "; ".join([f"{a} ↘ {b} ({v:.2f})" for a, b, v in top_neg]) if top_neg else "—"
+    msg = (
+        f"**Top positive relationships:** {pos_txt}.  "
+        f"**Top negative relationships:** {neg_txt}.  \n"
+        f"**Use it:** Positive pairs suggest co-movement—track them for levers; negative pairs hint trade-offs to manage."
+    )
     return corr, msg
 
 def rf_feature_importance(df_pd: pd.DataFrame, target: str) -> Optional[pd.Series]:
@@ -257,16 +297,18 @@ def mi_scores(df_pd: pd.DataFrame, target: str) -> Optional[pd.Series]:
     scores = mutual_info_regression(X, y, random_state=42)
     return pd.Series(scores, index=X.columns).sort_values(ascending=False)
 
-def opportunities_by_category(df_pd: pd.DataFrame, dim: str, metric: str, top_n: int = 5) -> Tuple[pd.DataFrame, str]:
+def opportunities_by_category(df_pd: pd.DataFrame, dim: str, metric: str, top_n: int = 5):
     d = df_pd[[dim, metric]].dropna()
     if d.empty: return pd.DataFrame(), "No data for opportunity analysis."
     overall = d[metric].mean()
-    g = d.groupby(dim)[metric].mean().sort_values()
-    under = g.head(min(top_n, len(g)))
-    uplift = (overall - under).clip(lower=0.0)
-    out = pd.DataFrame({"Avg": g, "Gap_to_Overall": uplift})
-    msg = "Quick wins: " + ", ".join([f"{idx} (↑{gap:.2f} to reach avg)" for idx, gap in uplift[uplift>0].items()][:top_n])
-    return out, msg if uplift.sum() > 0 else "No gaps vs overall average."
+    g = d.groupby(dim)[metric].agg(['mean','count']).sort_values('mean')
+    g['Gap_to_Overall'] = (overall - g['mean']).clip(lower=0)
+    g['Est_Uplift'] = g['Gap_to_Overall'] * g['count']  # simple potential if each reaches overall
+    msg_parts = []
+    for idx, row in g[g['Gap_to_Overall']>0].head(top_n).iterrows():
+        msg_parts.append(f"{idx} (↑{row['Gap_to_Overall']:.2f}/unit; est uplift≈{row['Est_Uplift']:.0f})")
+    msg = "Close gaps on underperformers: " + ", ".join(msg_parts) if msg_parts else "No gaps vs overall."
+    return g, msg
 
 # ---------------------------- Header ----------------------------
 st.markdown("<h1 style='margin-bottom:0'>🚀 Auto Insights – Storytelling Analytics</h1>", unsafe_allow_html=True)
@@ -330,11 +372,12 @@ with tabs[0]:
     st.markdown("<div class='glass'>", unsafe_allow_html=True)
     miss_series = df_pd.isna().sum().sort_values(ascending=False)
     if miss_series.sum() > 0:
-        fig = px.bar(miss_series.reset_index(), x="index", y=0, labels={"index":"Column", "0":"Missing"})
+        fig = px.bar(miss_series.reset_index(), x="index", y=0, labels={"index":"Column", "0":"Missing"}, title="Missing Values by Column")
         st.plotly_chart(fig, use_container_width=True)
         save_chart_png(fig, "missing_values.png")
         msg = "Data quality: {} columns with missing values; prioritize imputation for top affected.".format((miss_series>0).sum())
-        st.caption(msg)
+        st.markdown("### What this means")
+        st.markdown(msg)
         add_narrative("Missingness", msg)
     else:
         st.caption("No missing values detected.")
@@ -344,13 +387,14 @@ with tabs[0]:
 with tabs[1]:
     st.markdown("<div class='glass'>", unsafe_allow_html=True)
     st.subheader("Executive Summary")
-    # Top correlations
-    corr, cmsg = corr_matrix(df_pd, num_cols)
-    if not corr.empty:
-        fig = px.imshow(corr, color_continuous_scale="RdBu_r", origin="lower", aspect="auto", zmin=-1, zmax=1)
+    # Correlations
+    corr, cmsg = corr_top_pairs(df_pd, num_cols)
+    if corr is not None and not corr.empty:
+        fig = px.imshow(corr, color_continuous_scale="RdBu_r", origin="lower", aspect="auto", zmin=-1, zmax=1, title="Correlation Heatmap")
         st.plotly_chart(fig, use_container_width=True)
         save_chart_png(fig, "correlation_heatmap.png")
-    st.caption(cmsg)
+    st.markdown("### What this means")
+    st.markdown(cmsg)
     add_narrative("Correlations", cmsg)
 
     # Target selection for drivers/prescriptions
@@ -361,20 +405,19 @@ with tabs[1]:
             fig = px.bar(fi.head(12), labels={"value":"Importance","index":"Feature"}, title=f"Top Drivers of {target}")
             st.plotly_chart(fig, use_container_width=True)
             save_chart_png(fig, f"drivers_{target}.png")
-            msg = "Key drivers of {}: {}.".format(
-                target, ", ".join([f"{k} ({v:.2f})" for k,v in fi.head(5).items()])
-            )
-            st.caption(msg)
+            msg = "Key drivers of {}: {}.".format(target, ", ".join([f"{k} ({v:.2f})" for k,v in fi.head(5).items()]))
+            st.markdown("### What this means")
+            st.markdown(msg)
             add_narrative("Drivers", msg)
+
         mis = mi_scores(df_pd, target)
         if mis is not None:
             fig = px.bar(mis.head(12), labels={"value":"MI Score","index":"Feature"}, title=f"Information Gain wrt {target}")
             st.plotly_chart(fig, use_container_width=True)
             save_chart_png(fig, f"mi_{target}.png")
-            msg = "Signals with high information gain for {}: {}.".format(
-                target, ", ".join([f"{k} ({v:.2f})" for k,v in mis.head(5).items()])
-            )
-            st.caption(msg)
+            msg = "Signals with high information gain for {}: {}.".format(target, ", ".join([f"{k} ({v:.2f})" for k,v in mis.head(5).items()]))
+            st.markdown("### What this means")
+            st.markdown(msg)
             add_narrative("Information Gain", msg)
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -390,11 +433,13 @@ with tabs[2]:
     if chart_type == "Histogram":
         with col1:
             num = st.selectbox("Numeric", num_cols)
-        if friendly_guard(num is not None and num in num_cols):
-            fig = px.histogram(df_pd, x=num, nbins=50, opacity=0.85)
-            st.plotly_chart(fig, use_container_width=True)
-            save_chart_png(fig, f"hist_{num}.png")
-            st.caption(hist_narrative(df_pd, num))
+        if not friendly_guard(num is not None and num in num_cols):
+            st.stop()
+        fig = px.histogram(df_pd, x=num, nbins=50, opacity=0.85, title=f"Distribution of {num}")
+        st.plotly_chart(fig, use_container_width=True)
+        save_chart_png(fig, f"hist_{num}.png")
+        st.markdown("### What this means")
+        st.markdown(narrative_histogram(df_pd, num))
 
     # Box
     if chart_type == "Box":
@@ -402,26 +447,30 @@ with tabs[2]:
             num = st.selectbox("Numeric", num_cols, key="boxn")
         with col2:
             group = st.selectbox("Group (optional)", ["(none)"] + cat_cols, key="boxg")
-        if friendly_guard(num is not None and num in num_cols):
-            if group and group != "(none)":
-                fig = px.box(df_pd, x=group, y=num, points="outliers")
-            else:
-                fig = px.box(df_pd, y=num, points="outliers")
-            st.plotly_chart(fig, use_container_width=True)
-            save_chart_png(fig, f"box_{num}.png")
-            st.caption(box_narrative(df_pd, num))
+        if not friendly_guard(num is not None and num in num_cols):
+            st.stop()
+        if group and group != "(none)":
+            fig = px.box(df_pd, x=group, y=num, points="outliers", title=f"{num} by {group}")
+        else:
+            fig = px.box(df_pd, y=num, points="outliers", title=f"{num} Boxplot")
+        st.plotly_chart(fig, use_container_width=True)
+        save_chart_png(fig, f"box_{num}.png")
+        st.markdown("### What this means")
+        st.markdown(narrative_box(df_pd, num))
 
     # Bar Count
     if chart_type == "Bar (Count)":
         with col1:
             cat = st.selectbox("Categorical", cat_cols, key="barc")
-        if friendly_guard(cat is not None and cat in cat_cols):
-            topn = st.slider("Top N", 5, 50, 20)
-            counts = df_pd[cat].value_counts(dropna=False).head(topn)
-            fig = px.bar(counts, labels={"index":cat, "value":"Count"})
-            st.plotly_chart(fig, use_container_width=True)
-            save_chart_png(fig, f"bar_count_{cat}.png")
-            st.caption(bar_narrative(df_pd, cat, None, "count"))
+        if not friendly_guard(cat is not None and cat in cat_cols):
+            st.stop()
+        topn = st.slider("Top N", 5, 50, 20)
+        counts = df_pd[cat].value_counts(dropna=False).head(topn)
+        fig = px.bar(counts, labels={"index":cat, "value":"Count"}, title=f"{cat}: Top {topn} Counts")
+        st.plotly_chart(fig, use_container_width=True)
+        save_chart_png(fig, f"bar_count_{cat}.png")
+        st.markdown("### What this means")
+        st.markdown(narrative_bar_count(df_pd, cat))
 
     # Bar Aggregate
     if chart_type == "Bar (Aggregate)":
@@ -431,12 +480,14 @@ with tabs[2]:
             val = st.selectbox("Value", num_cols, key="barv")
         with col3:
             agg = st.selectbox("Aggregate", ["mean","sum","median"], index=0)
-        if friendly_guard((cat in cat_cols) and (val in num_cols)):
-            g = df_pd.groupby(cat)[val].agg(agg).sort_values(ascending=False).head(50)
-            fig = px.bar(g, labels={"index":cat, "value":f"{agg}({val})"})
-            st.plotly_chart(fig, use_container_width=True)
-            save_chart_png(fig, f"bar_agg_{cat}_{val}_{agg}.png")
-            st.caption(bar_narrative(df_pd, cat, val, agg))
+        if not friendly_guard((cat in cat_cols) and (val in num_cols)):
+            st.stop()
+        g = df_pd.groupby(cat)[val].agg(agg).sort_values(ascending=False).head(50)
+        fig = px.bar(g, labels={"index":cat, "value":f"{agg}({val})"}, title=f"{agg}({val}) by {cat}")
+        st.plotly_chart(fig, use_container_width=True)
+        save_chart_png(fig, f"bar_agg_{cat}_{val}_{agg}.png")
+        st.markdown("### What this means")
+        st.markdown(narrative_bar_agg(df_pd, cat, val, agg))
 
     # Line
     if chart_type == "Line":
@@ -451,11 +502,13 @@ with tabs[2]:
         else:
             df_tmp = df_pd
         ok = (tcol in dt_cols or tcol in cat_cols) and (vcol in num_cols) and (pd.to_datetime(df_tmp[tcol], errors="coerce").notna().sum()>2)
-        if friendly_guard(ok):
-            fig = px.line(df_tmp.sort_values(tcol), x=tcol, y=vcol)
-            st.plotly_chart(fig, use_container_width=True)
-            save_chart_png(fig, f"line_{tcol}_{vcol}.png")
-            st.caption(line_narrative(df_tmp, tcol, vcol))
+        if not friendly_guard(ok):
+            st.stop()
+        fig = px.line(df_tmp.sort_values(tcol), x=tcol, y=vcol, title=f"{vcol} over {tcol}")
+        st.plotly_chart(fig, use_container_width=True)
+        save_chart_png(fig, f"line_{tcol}_{vcol}.png")
+        st.markdown("### What this means")
+        st.markdown(narrative_line(df_tmp, tcol, vcol))
 
     # Scatter
     if chart_type == "Scatter":
@@ -465,24 +518,28 @@ with tabs[2]:
             y = st.selectbox("Y (numeric)", [c for c in num_cols if c != x], key="scy")
         with col3:
             color = st.selectbox("Color (optional)", ["(none)"] + cat_cols, key="scc")
-        if friendly_guard((x in num_cols) and (y in num_cols)):
-            if color and color != "(none)":
-                fig = px.scatter(df_pd, x=x, y=y, color=color, trendline="ols", opacity=0.75)
-            else:
-                fig = px.scatter(df_pd, x=x, y=y, trendline="ols", opacity=0.75)
-            st.plotly_chart(fig, use_container_width=True)
-            save_chart_png(fig, f"scatter_{x}_{y}.png")
-            st.caption(scatter_narrative(df_pd, x, y))
+        if not friendly_guard((x in num_cols) and (y in num_cols)):
+            st.stop()
+        if color and color != "(none)":
+            fig = px.scatter(df_pd, x=x, y=y, color=color, trendline="ols", opacity=0.75, title=f"{y} vs {x}")
+        else:
+            fig = px.scatter(df_pd, x=x, y=y, trendline="ols", opacity=0.75, title=f"{y} vs {x}")
+        st.plotly_chart(fig, use_container_width=True)
+        save_chart_png(fig, f"scatter_{x}_{y}.png")
+        st.markdown("### What this means")
+        st.markdown(narrative_scatter(df_pd, x, y))
 
     # Correlation Heatmap
     if chart_type == "Correlation Heatmap":
         ok = len(num_cols) >= 2
-        if friendly_guard(ok):
-            corr, cmsg2 = corr_matrix(df_pd, num_cols)
-            fig = px.imshow(corr, color_continuous_scale="RdBu_r", origin="lower", aspect="auto", zmin=-1, zmax=1)
-            st.plotly_chart(fig, use_container_width=True)
-            save_chart_png(fig, "correlation_heatmap_builder.png")
-            st.caption(cmsg2)
+        if not friendly_guard(ok):
+            st.stop()
+        corr2, cmsg2 = corr_top_pairs(df_pd, num_cols)
+        fig = px.imshow(corr2, color_continuous_scale="RdBu_r", origin="lower", aspect="auto", zmin=-1, zmax=1, title="Correlation Heatmap")
+        st.plotly_chart(fig, use_container_width=True)
+        save_chart_png(fig, "correlation_heatmap_builder.png")
+        st.markdown("### What this means")
+        st.markdown(cmsg2)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -504,16 +561,25 @@ with tabs[3]:
         dim = st.selectbox("Dimension (categorical)", cat_cols)
         metr = st.selectbox("Metric (numeric)", num_cols)
         ok = (dim in cat_cols) and (metr in num_cols)
-        if friendly_guard(ok):
-            out, msg = opportunities_by_category(df_pd, dim, metr, top_n=6)
-            if not out.empty:
-                fig = px.bar(out.sort_values("Gap_to_Overall", ascending=False).head(10), y=out.index, x="Gap_to_Overall",
-                             labels={"Gap_to_Overall":"Gap to Overall ↑", "index":dim}, orientation="h")
-                st.plotly_chart(fig, use_container_width=True)
-                save_chart_png(fig, f"opportunities_{dim}_{metr}.png")
-                st.dataframe(out, use_container_width=True)
-            st.caption(msg)
-            add_narrative("Opportunities", f"{dim}/{metr}: {msg}")
+        if not friendly_guard(ok):
+            st.stop()
+        out, msg = opportunities_by_category(df_pd, dim, metr, top_n=6)
+        if not out.empty:
+            out_df = out.reset_index().rename(columns={"index": dim})
+            out_df[dim] = out_df[dim].astype(str)
+
+            fig = px.bar(
+                out_df.sort_values("Gap_to_Overall", ascending=False).head(10),
+                y=dim, x="Gap_to_Overall", orientation="h",
+                labels={"Gap_to_Overall": f"Gap to Overall (↑ better)", dim: dim},
+                title=f"Quick Wins: Close the Gap on {metr}"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            save_chart_png(fig, f"opportunities_{dim}_{metr}.png")
+            st.dataframe(out_df, use_container_width=True)
+        st.markdown("### What this means")
+        st.markdown(msg)
+        add_narrative("Opportunities", f"{dim}/{metr}: {msg}")
     else:
         st.info("⚠️ Select correct data type (need at least one categorical & one numeric).")
     st.markdown("</div>", unsafe_allow_html=True)
@@ -549,12 +615,10 @@ with tabs[4]:
     st.dataframe(df_view.head(1000), use_container_width=True)
     colA, colB, colC = st.columns(3)
     with colA:
-        csv = df_view.to_csv(index=False).encode("utf-8")
-        st.download_button("💾 Download Cleaned CSV", csv, file_name="cleaned_data.csv", mime="text/csv")
+        csv_bytes = df_view.to_csv(index=False).encode("utf-8")
+        st.download_button("💾 Download Cleaned CSV", csv_bytes, file_name="cleaned_data.csv", mime="text/csv")
     with colB:
-        # Insights workbook (multi-sheet) — simple export
-        from io import BytesIO
-        buf = BytesIO()
+        buf = io.BytesIO()
         with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
             df_view.head(50000).to_excel(writer, index=False, sheet_name="Data")
             if num_cols:
@@ -563,22 +627,15 @@ with tabs[4]:
         buf.seek(0)
         st.download_button("📊 Download Insights (Excel)", buf, file_name="insights.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-import csv as csv_module
-import io
-
-with colC:
-    buf = io.StringIO()
-    writer = csv_module.writer(buf, quoting=csv_module.QUOTE_ALL)
-    writer.writerow(["Title", "Text"])
-    for t, x in st.session_state.get("narratives", []):
-        writer.writerow([t, x])
-    csv_bytes = buf.getvalue().encode("utf-8")
-    st.download_button(
-        "📝 Download Narratives (CSV)",
-        csv_bytes,
-        file_name="narratives.csv",
-        mime="text/csv"
-    )
+    with colC:
+        buf = io.StringIO()
+        writer = csv_module.writer(buf, quoting=csv_module.QUOTE_ALL)
+        writer.writerow(["Title", "Text"])
+        for t, x in st.session_state.get("narratives", []):
+            writer.writerow([t, x])
+        csv_export = buf.getvalue().encode("utf-8")
+        st.download_button("📝 Download Narratives (CSV)", csv_export, file_name="narratives.csv", mime="text/csv")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------- PDF Report (Narratives + Thumbnails) ----------------------------
 with st.container():
@@ -603,7 +660,8 @@ with st.container():
             pdf.set_font("Helvetica", "B", 11)
             pdf.multi_cell(0, 14, f"• {title}")
             pdf.set_font("Helvetica", "", 11)
-            pdf.multi_cell(0, 14, text)
+            # Replace Markdown-style ** ** with plain text emphasis surrogate
+            pdf.multi_cell(0, 14, text.replace("**", ""))
             pdf.ln(4)
 
         # Visual thumbnails
@@ -638,7 +696,7 @@ with st.container():
         st.download_button("Save PDF", data=pdf_bytes, file_name=f"auto_insights_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf", mime="application/pdf")
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------------------------- Footer Core Functionality (static copy for clarity) ----------------------------
+# ---------------------------- Core Feature Summary ----------------------------
 with st.expander("Core Functionality & Technical Excellence", expanded=False):
     st.markdown("""
 **Core Functionality**
@@ -651,7 +709,7 @@ with st.expander("Core Functionality & Technical Excellence", expanded=False):
 **Technical Excellence**
 - Production-Grade: Python 3.11+, robust guards (“Select correct data type”), memory-aware ✅
 - Scalable Architecture: Session caching, Parquet conversion, Polars backend ✅
-- Beautiful UI: Modern glassmorphism gradients & responsive layout ✅
+- Beautiful UI: Clean white theme, subtle glass cards, responsive layout ✅
 - Export: Insights to Excel, visuals to PNG/ZIP, cleaned data to CSV, full PDF ✅
 
 **User Experience**
