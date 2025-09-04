@@ -732,14 +732,21 @@ def main():
             
             # Export visualizations
             if st.button("🖼️ Export Visualizations"):
-                viz_zip = ExportManager.export_visualizations(st.session_state.visualizations)
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                st.download_button(
-                    label="📥 Download Visualizations",
-                    data=viz_zip,
-                    file_name=f"visualizations_{timestamp}.zip",
-                    mime="application/zip"
-                )
+                try:
+                    viz_zip = ExportManager.export_visualizations(st.session_state.visualizations)
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    if len(viz_zip) > 0:
+                        st.download_button(
+                            label="📥 Download Visualizations",
+                            data=viz_zip,
+                            file_name=f"visualizations_{timestamp}.zip",
+                            mime="application/zip"
+                        )
+                    else:
+                        st.warning("⚠️ Visualization export failed. Use individual chart download options instead.")
+                except Exception as e:
+                    st.error("❌ Visualization export is not available in this environment.")
+                    st.info("💡 **Alternative**: Use the download buttons on individual charts or take screenshots.")
             
             # Export cleaned data
             if st.button("💾 Export Cleaned Data"):
