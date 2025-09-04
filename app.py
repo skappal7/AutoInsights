@@ -1118,35 +1118,24 @@ def main():
     
     else:
         # Welcome screen
-        st.markdown("""
-        <div style="text-align: center; padding: 3rem;">
-            <h2>🚀 Welcome to AutoInsights Analytics Platform</h2>
-            <p style="font-size: 1.2rem; margin: 2rem 0;">
-                Upload your data file to get started with AI-powered insights and visualizations
-            </p>
+        st.markdown("## 🚀 Welcome to AutoInsights Analytics Platform")
+        st.markdown("### Transform your data into actionable insights with AI-powered analytics")
+        
+        # Create columns for feature cards
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.info("📊 **Auto Insights**\n\nGet automatic insights about data patterns, correlations, and anomalies")
             
-            <div style="display: flex; justify-content: center; gap: 2rem; margin: 2rem 0;">
-                <div class="insight-card" style="max-width: 300px;">
-                    <h4>📊 Auto Insights</h4>
-                    <p>Get automatic insights about data patterns, correlations, and anomalies</p>
-                </div>
-                
-                <div class="insight-card" style="max-width: 300px;">
-                    <h4>🎯 Smart Recommendations</h4>
-                    <p>Receive actionable recommendations for data-driven decision making</p>
-                </div>
-                
-                <div class="insight-card" style="max-width: 300px;">
-                    <h4>📈 Interactive Visualizations</h4>
-                    <p>Beautiful, interactive charts and graphs to explore your data</p>
-                </div>
-            </div>
+        with col2:
+            st.success("🎯 **Smart Recommendations**\n\nReceive actionable recommendations for data-driven decision making")
             
-            <p style="color: #666; margin-top: 2rem;">
-                Supports CSV and Excel files • Advanced analytics • Export capabilities • Production-grade performance
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+        with col3:
+            st.info("📈 **Interactive Visualizations**\n\nBeautiful, interactive charts and graphs to explore your data")
+        
+        st.markdown("---")
+        st.markdown("**Features:** CSV and Excel support • Advanced analytics • Export capabilities • Production-grade performance")
+        st.markdown("**Get started by uploading your data file using the sidebar! 👈**")
     
     # Footer
     st.markdown("""
