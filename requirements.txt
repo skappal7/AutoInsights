@@ -2,46 +2,44 @@
 streamlit>=1.28.0
 
 # Data Processing and Analysis
-pandas>=2.0.0
-numpy>=1.24.0
-pyarrow>=12.0.0
-fastparquet>=0.8.3
-polars>=0.19.0
-dask>=2023.5.0
-vaex>=4.17.0
+pandas>=2.1.0
+numpy>=1.26.0
+pyarrow>=14.0.0
+fastparquet>=2023.8.0
+polars>=0.20.0   # blazing fast pandas alternative, 3.11+ ready
+dask[dataframe]>=2023.10.0   # scalable dataframe ops, 3.11+ ready
 
 # Machine Learning and Statistics
 scikit-learn>=1.3.0
-scipy>=1.10.0
+scipy>=1.11.0
 
 # Visualization Libraries
-plotly>=5.15.0
-seaborn>=0.12.0
-matplotlib>=3.7.0
-altair>=5.0.0
+plotly>=5.18.0
+seaborn>=0.13.0
+matplotlib>=3.8.0
+altair>=5.2.0
 
 # Image Processing for Exports
-Pillow>=9.5.0
+Pillow>=10.0.0
 kaleido>=0.2.1
 
 # Excel File Handling
-openpyxl>=3.1.0
-xlsxwriter>=3.1.0
+openpyxl>=3.1.2
+xlsxwriter>=3.1.2
 
 # Additional Data Processing
-python-dateutil>=2.8.0
+python-dateutil>=2.8.2
 pytz>=2023.3
-numba>=0.57.0
 
 # File Compression
 zipfile36>=0.1.3
 
 # Reporting and Narratives
-fpdf2>=2.7.0
-jinja2>=3.1.2
+fpdf2>=2.7.9
+jinja2>=3.1.3
 
-# Optional: AI-powered Narratives
-transformers>=4.33.0
+# Optional: AI-powered Narratives (requires PyTorch, compatible with 3.11+ now)
+transformers>=4.39.0
 
 # Developer Experience
-rich>=13.4.0
+rich>=13.7.0
