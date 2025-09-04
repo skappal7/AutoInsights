@@ -729,20 +729,10 @@ def main():
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             
-# Export visualizations
-if st.button("🖼️ Export Visualizations"):
-    try:
-        viz_zip = ExportManager.export_visualizations(st.session_state.visualizations)
-        st.download_button(
-            label="📥 Download Visualizations",
-            data=viz_zip,
-            file_name=f"visualizations_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-            mime="application/zip",
-        )
-    except Exception as e:
-        # Plotly image export needs 'kaleido' installed; this makes failures clearer.
-        st.error(
-            "❌ Failed to export images. "
-            "If the error mentions 'kaleido', install it with: pip install -U kaleido. "
-            f"Details: {e}"
-        )
+            # Export visualizations
+            if st.button("🖼️ Export Visualizations"):
+                viz_zip = ExportManager.export_visualizations(st.session_state.visualizations)
+                st.download_button(
+                    label="📥 Download Visualizations",
+                    data=viz_zip,
+                    file_name=f"visualizations_{datetime.now().strftime('%Y%m%d_%H%M%S')
