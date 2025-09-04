@@ -722,17 +722,440 @@ def main():
                     st.session_state.insights, 
                     st.session_state.opportunities
                 )
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 st.download_button(
                     label="📥 Download Insights Excel",
                     data=excel_data,
-                    file_name=f"insights_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    file_name=f"insights_{timestamp}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
             
             # Export visualizations
             if st.button("🖼️ Export Visualizations"):
                 viz_zip = ExportManager.export_visualizations(st.session_state.visualizations)
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 st.download_button(
                     label="📥 Download Visualizations",
                     data=viz_zip,
-                    file_name=f"visualizations_{datetime.now().strftime('%Y%m%d_%H%M%S')
+                    file_name=f"visualizations_{timestamp}.zip",
+                    mime="application/zip"
+                )
+            
+            # Export cleaned data
+            if st.button("💾 Export Cleaned Data"):
+                cleaned_csv = st.session_state.processed_data.to_csv(index=False).encode('utf-8')
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                st.download_button(
+                    label="📥 Download Cleaned CSV",
+                    data=cleaned_csv,
+                    file_name=f"cleaned_data_{timestamp}.csv",
+                    mime="text/csv"
+                )
+    
+    # Main content area
+    if st.session_state.processed_data is not None:
+        df = st.session_state.processed_data
+        
+        # Quick metrics
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>{len(df):,}</h3>
+                <p>Total Records</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>{len(df.columns)}</h3>
+                <p>Variables</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            missing_pct = (df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>{missing_pct:.1f}%</h3>
+                <p>Missing Data</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col4:
+            numeric_cols = len(st.session_state.data_types['numeric'])
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>{numeric_cols}</h3>
+                <p>Numeric Vars</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col5:
+            insights_count = len([i for i in st.session_state.insights if i.get('severity') in ['warning', 'success']])
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3>{insights_count}</h3>
+                <p>Key Insights</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Main tabs
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "📊 Overview", 
+            "🧠 AI Insights", 
+            "📈 Visualizations", 
+            "🎯 Opportunities", 
+            "📋 Data Explorer"
+        ])
+        
+        with tab1:
+            st.markdown("## 📊 Data Overview & Narrative")
+            
+            # Data narrative
+            st.markdown('<div class="narrative-section">', unsafe_allow_html=True)
+            st.markdown(st.session_state.narrative)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Data preview
+            st.markdown("### 🔍 Data Preview")
+            st.dataframe(
+                df.head(100), 
+                use_container_width=True,
+                height=400
+            )
+            
+            # Data types summary
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### 📋 Data Types Summary")
+                data_type_summary = pd.DataFrame({
+                    'Column': df.columns,
+                    'Data Type': df.dtypes.astype(str),
+                    'Non-Null Count': df.count(),
+                    'Null Count': df.isnull().sum(),
+                    'Null %': (df.isnull().sum() / len(df) * 100).round(2)
+                })
+                st.dataframe(data_type_summary, use_container_width=True, height=300)
+            
+            with col2:
+                st.markdown("### 📊 Basic Statistics")
+                if st.session_state.data_types['numeric']:
+                    stats_df = df[st.session_state.data_types['numeric']].describe()
+                    st.dataframe(stats_df, use_container_width=True, height=300)
+        
+        with tab2:
+            st.markdown("## 🧠 AI-Generated Insights")
+            
+            # Group insights by type
+            insight_types = {
+                'overview': '📊 Dataset Overview',
+                'data_quality': '🚨 Data Quality',
+                'distribution': '📈 Distribution Analysis',
+                'correlation': '🔗 Correlations',
+                'causal': '🎯 Causal Analysis',
+                'outliers': '⚠️ Outlier Detection'
+            }
+            
+            for insight_type, title in insight_types.items():
+                type_insights = [i for i in st.session_state.insights if i.get('type') == insight_type]
+                
+                if type_insights:
+                    st.markdown(f"### {title}")
+                    
+                    for insight in type_insights:
+                        severity_colors = {
+                            'info': '#4facfe',
+                            'warning': '#f5576c',
+                            'success': '#00f2fe',
+                            'error': '#ff6b6b'
+                        }
+                        
+                        color = severity_colors.get(insight.get('severity', 'info'), '#4facfe')
+                        
+                        st.markdown(f"""
+                        <div class="insight-card" style="border-left: 4px solid {color};">
+                            <h4>{insight.get('title', 'Insight')}</h4>
+                            <p>{insight.get('content', '')}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+            
+            # Correlation matrix if available
+            if len(st.session_state.data_types['numeric']) >= 2:
+                st.markdown("### 🔗 Correlation Analysis")
+                numeric_df = df[st.session_state.data_types['numeric']]
+                corr_matrix = numeric_df.corr()
+                
+                # Create correlation heatmap
+                fig = px.imshow(
+                    corr_matrix,
+                    color_continuous_scale='RdBu',
+                    aspect='auto',
+                    title='Correlation Matrix Heatmap'
+                )
+                fig.update_layout(height=500, template="plotly_dark")
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with tab3:
+            st.markdown("## 📈 Interactive Visualizations")
+            
+            if st.session_state.visualizations:
+                # Display all visualizations
+                for i, fig in enumerate(st.session_state.visualizations):
+                    st.plotly_chart(fig, use_container_width=True, key=f"viz_{i}")
+                    
+                    # Add download button for individual charts
+                    img_bytes = pio.to_image(fig, format='png', width=1200, height=800)
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    st.download_button(
+                        label=f"📥 Download Chart {i+1}",
+                        data=img_bytes,
+                        file_name=f"chart_{i+1}_{timestamp}.png",
+                        mime="image/png",
+                        key=f"download_viz_{i}"
+                    )
+            
+            # Custom visualization builder
+            st.markdown("### 🎨 Custom Visualization Builder")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                chart_type = st.selectbox(
+                    "Chart Type",
+                    ["Scatter Plot", "Line Chart", "Bar Chart", "Histogram", "Box Plot", "Violin Plot"]
+                )
+            
+            with col2:
+                x_axis = st.selectbox(
+                    "X-Axis",
+                    df.columns.tolist()
+                )
+            
+            with col3:
+                y_axis = st.selectbox(
+                    "Y-Axis",
+                    df.columns.tolist(),
+                    index=1 if len(df.columns) > 1 else 0
+                )
+            
+            if st.button("Generate Custom Chart"):
+                try:
+                    if chart_type == "Scatter Plot":
+                        fig = px.scatter(df, x=x_axis, y=y_axis, template="plotly_dark")
+                    elif chart_type == "Line Chart":
+                        fig = px.line(df, x=x_axis, y=y_axis, template="plotly_dark")
+                    elif chart_type == "Bar Chart":
+                        fig = px.bar(df.head(20), x=x_axis, y=y_axis, template="plotly_dark")
+                    elif chart_type == "Histogram":
+                        fig = px.histogram(df, x=x_axis, template="plotly_dark")
+                    elif chart_type == "Box Plot":
+                        fig = px.box(df, y=y_axis, template="plotly_dark")
+                    elif chart_type == "Violin Plot":
+                        fig = px.violin(df, y=y_axis, template="plotly_dark")
+                    
+                    fig.update_layout(height=500)
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                except Exception as e:
+                    st.error(f"Error creating chart: {str(e)}")
+        
+        with tab4:
+            st.markdown("## 🎯 Business Opportunities")
+            
+            if st.session_state.opportunities:
+                # Priority opportunities
+                high_impact = [o for o in st.session_state.opportunities if o.get('impact') == 'high']
+                medium_impact = [o for o in st.session_state.opportunities if o.get('impact') == 'medium']
+                
+                if high_impact:
+                    st.markdown("### 🚀 High Impact Opportunities")
+                    for opp in high_impact:
+                        st.markdown(f"""
+                        <div class="opportunity-card">
+                            <h4>🎯 {opp.get('title', 'Opportunity')}</h4>
+                            <p>{opp.get('content', '')}</p>
+                            <div style="margin-top: 10px;">
+                                <span style="background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 15px; font-size: 0.8rem;">
+                                    Impact: {opp.get('impact', 'Unknown').upper()}
+                                </span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                if medium_impact:
+                    st.markdown("### 📈 Medium Impact Opportunities")
+                    for opp in medium_impact:
+                        st.markdown(f"""
+                        <div class="insight-card">
+                            <h4>📊 {opp.get('title', 'Opportunity')}</h4>
+                            <p>{opp.get('content', '')}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+            
+            # Performance analysis
+            if st.session_state.data_types['numeric']:
+                st.markdown("### 📊 Performance Analysis")
+                
+                selected_metric = st.selectbox(
+                    "Select metric for performance analysis:",
+                    st.session_state.data_types['numeric']
+                )
+                
+                if selected_metric:
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        # Performance distribution
+                        fig = px.histogram(
+                            df, 
+                            x=selected_metric,
+                            title=f"Distribution of {selected_metric}",
+                            template="plotly_dark"
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    with col2:
+                        # Performance quartiles
+                        quartiles = df[selected_metric].quantile([0.25, 0.5, 0.75, 1.0])
+                        
+                        fig = go.Figure()
+                        fig.add_trace(go.Bar(
+                            x=['Bottom 25%', 'Q2', 'Q3', 'Top 25%'],
+                            y=[quartiles.iloc[0], quartiles.iloc[1], quartiles.iloc[2], quartiles.iloc[3]],
+                            marker_color=['#ff6b6b', '#ffa726', '#66bb6a', '#42a5f5']
+                        ))
+                        
+                        fig.update_layout(
+                            title=f"Performance Quartiles - {selected_metric}",
+                            template="plotly_dark"
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+        
+        with tab5:
+            st.markdown("## 📋 Data Explorer")
+            
+            # Advanced filtering
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### 🔍 Filter Data")
+                
+                # Column selector
+                selected_columns = st.multiselect(
+                    "Select columns to display:",
+                    df.columns.tolist(),
+                    default=df.columns.tolist()[:10]
+                )
+                
+                # Numeric filters
+                if st.session_state.data_types['numeric']:
+                    numeric_filter_col = st.selectbox(
+                        "Filter by numeric column:",
+                        ['None'] + st.session_state.data_types['numeric']
+                    )
+                    
+                    if numeric_filter_col != 'None':
+                        min_val, max_val = st.slider(
+                            f"Range for {numeric_filter_col}:",
+                            float(df[numeric_filter_col].min()),
+                            float(df[numeric_filter_col].max()),
+                            (float(df[numeric_filter_col].min()), float(df[numeric_filter_col].max()))
+                        )
+            
+            with col2:
+                st.markdown("### 📊 Quick Statistics")
+                
+                if selected_columns:
+                    selected_df = df[selected_columns]
+                    
+                    # Apply numeric filter if selected
+                    if 'numeric_filter_col' in locals() and numeric_filter_col != 'None':
+                        selected_df = selected_df[
+                            (df[numeric_filter_col] >= min_val) & 
+                            (df[numeric_filter_col] <= max_val)
+                        ]
+                    
+                    st.write(f"**Filtered Records:** {len(selected_df):,}")
+                    st.write(f"**Selected Columns:** {len(selected_columns)}")
+                    
+                    # Quick stats for numeric columns
+                    numeric_selected = [col for col in selected_columns if col in st.session_state.data_types['numeric']]
+                    if numeric_selected:
+                        st.write("**Numeric Summary:**")
+                        st.dataframe(selected_df[numeric_selected].describe(), use_container_width=True)
+            
+            # Display filtered data
+            if selected_columns:
+                filtered_df = df[selected_columns]
+                
+                # Apply filters
+                if 'numeric_filter_col' in locals() and numeric_filter_col != 'None':
+                    filtered_df = filtered_df[
+                        (df[numeric_filter_col] >= min_val) & 
+                        (df[numeric_filter_col] <= max_val)
+                    ]
+                
+                st.markdown("### 📊 Filtered Dataset")
+                st.dataframe(
+                    filtered_df, 
+                    use_container_width=True,
+                    height=500
+                )
+                
+                # Download filtered data
+                csv_data = filtered_df.to_csv(index=False).encode('utf-8')
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                st.download_button(
+                    label="📥 Download Filtered Data",
+                    data=csv_data,
+                    file_name=f"filtered_data_{timestamp}.csv",
+                    mime="text/csv"
+                )
+    
+    else:
+        # Welcome screen
+        st.markdown("""
+        <div style="text-align: center; padding: 3rem;">
+            <h2>🚀 Welcome to AutoInsights Analytics Platform</h2>
+            <p style="font-size: 1.2rem; margin: 2rem 0;">
+                Upload your data file to get started with AI-powered insights and visualizations
+            </p>
+            
+            <div style="display: flex; justify-content: center; gap: 2rem; margin: 2rem 0;">
+                <div class="insight-card" style="max-width: 300px;">
+                    <h4>📊 Auto Insights</h4>
+                    <p>Get automatic insights about data patterns, correlations, and anomalies</p>
+                </div>
+                
+                <div class="insight-card" style="max-width: 300px;">
+                    <h4>🎯 Smart Recommendations</h4>
+                    <p>Receive actionable recommendations for data-driven decision making</p>
+                </div>
+                
+                <div class="insight-card" style="max-width: 300px;">
+                    <h4>📈 Interactive Visualizations</h4>
+                    <p>Beautiful, interactive charts and graphs to explore your data</p>
+                </div>
+            </div>
+            
+            <p style="color: #666; margin-top: 2rem;">
+                Supports CSV and Excel files • Advanced analytics • Export capabilities • Production-grade performance
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Footer
+    st.markdown("""
+    <div style="text-align: center; padding: 2rem 0; margin-top: 3rem; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+        <p style="color: #666; font-size: 0.9rem;">
+            Developed by <strong>CE Innovations Lab</strong> © 2025
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
