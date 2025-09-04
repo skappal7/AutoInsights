@@ -712,27 +712,20 @@ def main():
                         st.error(f"❌ Error processing file: {str(e)}")
                         return
         
-        # Export section
-        if st.session_state.processed_data is not None:
-            st.markdown("### 📊 Export Options")
-            
-            # Export insights
-            if st.button("📋 Export Insights"):
-                excel_data = ExportManager.export_insights_to_excel(
-                    st.session_state.insights, 
-                    st.session_state.opportunities
-                )
-                st.download_button(
-                    label="📥 Download Insights Excel",
-                    data=excel_data,
-                    file_name=f"insights_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            
-            # Export visualizations
-            if st.button("🖼️ Export Visualizations"):
-                viz_zip = ExportManager.export_visualizations(st.session_state.visualizations)
-                st.download_button(
-                    label="📥 Download Visualizations",
-                    data=viz_zip,
-                    file_name=f"visualizations_{datetime.now().strftime('%Y%m%d_%H%M%S')
+# Export visualizations
+if st.button("🖼️ Export Visualizations"):
+    try:
+        viz_zip = ExportManager.export_visualizations(st.session_state.visualizations)
+        st.download_button(
+            label="📥 Download Visualizations",
+            data=viz_zip,
+            file_name=f"visualizations_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            mime="application/zip",
+        )
+    except Exception as e:
+        # Plotly image export needs 'kaleido' installed; this makes failures clearer.
+        st.error(
+            "❌ Failed to export images. "
+            "If the error mentions 'kaleido', install it with: pip install -U kaleido. "
+            f"Details: {e}"
+        )
