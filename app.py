@@ -564,13 +564,15 @@ with tabs[4]:
         buf.seek(0)
         st.download_button("📊 Download Insights (Excel)", buf, file_name="insights.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+import csv as csv_module
+import io
+
 with colC:
-    import io
     buf = io.StringIO()
-    w = csv.writer(buf)
-    w.writerow(["Title", "Text"])
+    writer = csv_module.writer(buf, quoting=csv_module.QUOTE_ALL)
+    writer.writerow(["Title", "Text"])
     for t, x in st.session_state.get("narratives", []):
-        w.writerow([t, x])
+        writer.writerow([t, x])
     csv_bytes = buf.getvalue().encode("utf-8")
     st.download_button(
         "📝 Download Narratives (CSV)",
