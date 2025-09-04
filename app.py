@@ -1,159 +1,155 @@
 import streamlit as st
-import pandas as pd
+import polars as pl
+import altair as alt
 import numpy as np
 import plotly.express as px
-import seaborn as sns
-import matplotlib.pyplot as plt
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.feature_selection import mutual_info_regression
 from io import BytesIO
 from fpdf import FPDF
-import os
 
-st.set_page_config(page_title="🚀 Auto Insights V2", layout="wide")
+st.set_page_config(page_title="🚀 Auto Insights V4", layout="wide")
 
-# ================== Utility ==================
+# ================== Load Data ==================
 @st.cache_data(show_spinner=False)
-def load_data(file) -> pd.DataFrame:
-    ext = os.path.splitext(file.name)[1].lower()
-    if ext in [".csv", ".txt"]:
-        df = pd.read_csv(file)
-    elif ext in [".xlsx", ".xls"]:
-        df = pd.read_excel(file)
+def load_data(file) -> pl.DataFrame:
+    ext = file.name.split(".")[-1].lower()
+    if ext == "csv":
+        df = pl.read_csv(file)
+    elif ext in ["xlsx", "xls"]:
+        import pandas as pd
+        pdf = pd.read_excel(file)
+        df = pl.from_pandas(pdf)
     else:
-        raise ValueError("Unsupported file format")
+        raise ValueError("Unsupported format")
     return df
 
-def generate_summary(df: pd.DataFrame) -> str:
-    missing = df.isnull().sum().sum()
-    num_cols = df.select_dtypes(include=np.number).shape[1]
-    cat_cols = df.select_dtypes(exclude=np.number).shape[1]
-    return (
-        f"Dataset has **{df.shape[0]:,} rows** and **{df.shape[1]} columns**.\n\n"
-        f"- Missing values: {missing:,}\n"
-        f"- Numeric columns: {num_cols}\n"
-        f"- Categorical columns: {cat_cols}\n"
-    )
+# ================== Narrative Generators ==================
+def describe_distribution(df: pl.DataFrame, col: str) -> str:
+    series = df[col]
+    mean, std, minv, maxv = series.mean(), series.std(), series.min(), series.max()
+    skewness = ((series - mean)**3).mean() / (std**3 + 1e-9)
+    trend = "positively skewed" if skewness > 0.5 else "negatively skewed" if skewness < -0.5 else "fairly symmetric"
+    return f"📊 **{col}** ranges {minv:.2f} → {maxv:.2f} (mean={mean:.2f}, std={std:.2f}). Distribution is {trend}."
 
-def correlation_analysis(df: pd.DataFrame):
-    numeric_df = df.select_dtypes(include=np.number).dropna()
-    corr = numeric_df.corr()
-    fig, ax = plt.subplots(figsize=(10, 6))
-    sns.heatmap(corr, annot=False, cmap="coolwarm", ax=ax)
-    st.pyplot(fig)
-    return corr
-
-def causal_inference(df: pd.DataFrame, target: str):
-    df = df.select_dtypes(include=np.number).dropna()
-    if target not in df.columns:
-        return None
-    X, y = df.drop(columns=[target]), df[target]
-    if X.empty: return None
-    model = RandomForestRegressor(random_state=42)
-    model.fit(X, y)
-    fi = pd.Series(model.feature_importances_, index=X.columns).sort_values(ascending=False)
-    return fi
-
-def prescriptive_analysis(df: pd.DataFrame, target: str):
-    df = df.select_dtypes(include=np.number).dropna()
-    if target not in df.columns:
-        return None
-    X, y = df.drop(columns=[target]), df[target]
-    if X.empty: return None
-    mi = mutual_info_regression(X, y)
-    return pd.Series(mi, index=X.columns).sort_values(ascending=False)
-
-def narrative_from_corr(corr):
-    narr = []
-    top_corr = corr.unstack().dropna().sort_values(ascending=False)
-    top_corr = top_corr[top_corr < 0.999].head(3)  # exclude self
-    for (c1, c2), val in top_corr.items():
-        narr.append(f"🔗 **{c1}** is highly correlated with **{c2}** (r={val:.2f}).")
-    return "\n".join(narr)
-
-def narrative_from_importance(series, title=""):
-    if series is None or series.empty: return ""
-    top = series.head(3)
-    narr = f"📊 Key drivers identified for {title}:\n"
-    for feat, score in top.items():
-        narr += f"- {feat} ({score:.2f})\n"
+def bar_narrative(df: pl.DataFrame, col: str) -> str:
+    counts = df[col].value_counts().to_pandas()
+    top_cat, top_val = counts.iloc[0][col], counts.iloc[0]['count']
+    narr = f"📊 **{col}** distribution: Top category is **{top_cat}** with {top_val} occurrences. "
+    if len(counts) > 1:
+        second_val = counts.iloc[1]['count']
+        narr += f"Gap between top and second is {top_val - second_val}."
     return narr
 
-def download_pdf(narratives, figs):
+def line_narrative(df: pl.DataFrame, time_col: str, val_col: str) -> str:
+    series = df.select([time_col, val_col]).to_pandas().sort_values(time_col)[val_col]
+    growth = series.iloc[-1] - series.iloc[0]
+    trend = "increasing" if growth > 0 else "decreasing"
+    return f"📈 Over time, **{val_col}** is {trend} by {growth:.2f} units from start to end."
+
+def scatter_narrative(df: pl.DataFrame, x: str, y: str) -> str:
+    corr = df.select([x, y]).to_pandas().corr().iloc[0, 1]
+    strength = "strong" if abs(corr) > 0.7 else "moderate" if abs(corr) > 0.4 else "weak"
+    return f"🔗 Scatter shows {strength} correlation ({corr:.2f}) between **{x}** and **{y}**."
+
+def correlation_narrative(df: pl.DataFrame):
+    num_cols = df.select(pl.col(pl.Float64), pl.col(pl.Int64)).columns
+    if len(num_cols) < 2:
+        return "Not enough numeric columns for correlation."
+    corr = df.select(num_cols).to_pandas().corr()
+    top_corr = corr.unstack().dropna().sort_values(ascending=False)
+    top_corr = top_corr[top_corr < 0.999].head(3)
+    narr = "📌 Top correlations:\n"
+    for (c1, c2), val in top_corr.items():
+        narr += f"- {c1} vs {c2} → {val:.2f}\n"
+    return narr
+
+# ================== PDF Report ==================
+def generate_pdf(narratives):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-
     pdf.cell(200, 10, "Auto Insights Report", ln=True, align="C")
     pdf.ln(10)
-
     for title, text in narratives.items():
         pdf.set_font("Arial", "B", 12)
         pdf.cell(200, 10, title, ln=True)
         pdf.set_font("Arial", size=11)
         pdf.multi_cell(0, 8, text)
         pdf.ln(5)
-
     buf = BytesIO()
     pdf.output(buf)
     buf.seek(0)
-    st.download_button("📑 Download PDF Report", buf, file_name="auto_insights_report.pdf", mime="application/pdf")
+    st.download_button("📑 Download Full Report", buf, "auto_insights_report.pdf", mime="application/pdf")
 
-# ================== UI ==================
-st.title("🚀 Auto Insights V2")
-st.markdown("Mind-blowing narratives + visuals + prescriptions.")
+# ================== Streamlit App ==================
+st.title("🚀 Auto Insights V4 – Full Data Storytelling")
+st.markdown("Every visual comes with **dynamic narratives** powered by Polars + Altair.")
 
-uploaded_file = st.file_uploader("Upload your dataset", type=["csv","xlsx","xls","txt"])
+uploaded_file = st.file_uploader("Upload dataset", type=["csv","xlsx","xls"])
 if uploaded_file:
     df = load_data(uploaded_file)
-    st.success("✅ Data loaded successfully!")
-    
-    # Sidebar navigation
-    menu = st.sidebar.radio("Navigate", ["Overview", "Correlations", "Causal", "Prescriptive", "Opportunities", "Report"])
-    
+    st.success("✅ Data loaded")
     narratives = {}
-    figs = {}
 
-    if menu == "Overview":
-        st.subheader("📌 Data Overview")
-        st.markdown(generate_summary(df))
-        st.dataframe(df.head())
+    # Overview
+    st.subheader("📌 Data Overview")
+    st.write(df.head(10).to_pandas())
+    overview = f"Dataset has {df.shape[0]:,} rows and {df.shape[1]} columns."
+    st.markdown(overview)
+    narratives["Overview"] = overview
 
-    if menu == "Correlations":
-        st.subheader("📈 Correlation Analysis")
-        corr = correlation_analysis(df)
-        narratives["Correlation Insights"] = narrative_from_corr(corr)
+    # Distribution
+    st.subheader("📊 Distribution")
+    col = st.selectbox("Choose numeric column", df.columns)
+    if col:
+        chart = alt.Chart(df.to_pandas()).mark_bar().encode(x=alt.X(col, bin=alt.Bin(maxbins=30)), y='count()')
+        st.altair_chart(chart, use_container_width=True)
+        narr = describe_distribution(df, col)
+        st.markdown(narr)
+        narratives["Distribution"] = narr
 
-    if menu == "Causal":
-        st.subheader("🔍 Causal Inference")
-        target = st.selectbox("Select Target Variable", df.select_dtypes(include=np.number).columns)
-        fi = causal_inference(df, target)
-        if fi is not None:
-            st.bar_chart(fi)
-            narratives["Causal Inference"] = narrative_from_importance(fi, target)
+    # Bar Chart
+    st.subheader("📊 Bar Chart (Categorical)")
+    cat_col = st.selectbox("Choose categorical column", df.columns)
+    if cat_col:
+        chart = alt.Chart(df.to_pandas()).mark_bar().encode(x=cat_col, y='count()')
+        st.altair_chart(chart, use_container_width=True)
+        narr = bar_narrative(df, cat_col)
+        st.markdown(narr)
+        narratives["Bar Chart"] = narr
 
-    if menu == "Prescriptive":
-        st.subheader("🧭 Prescriptive Analysis")
-        target = st.selectbox("Select Target Variable for Prescriptive", df.select_dtypes(include=np.number).columns, key="presc")
-        mi_scores = prescriptive_analysis(df, target)
-        if mi_scores is not None:
-            st.bar_chart(mi_scores)
-            narratives["Prescriptive Insights"] = narrative_from_importance(mi_scores, target)
+    # Line Chart
+    st.subheader("📈 Line Chart (Trend)")
+    time_col = st.selectbox("Choose time column", df.columns)
+    val_col = st.selectbox("Choose value column", df.columns)
+    if time_col and val_col:
+        chart = alt.Chart(df.to_pandas()).mark_line().encode(x=time_col, y=val_col)
+        st.altair_chart(chart, use_container_width=True)
+        narr = line_narrative(df, time_col, val_col)
+        st.markdown(narr)
+        narratives["Line Chart"] = narr
 
-    if menu == "Opportunities":
-        st.subheader("💡 Quick Opportunities")
-        num_cols = df.select_dtypes(include=np.number).columns
-        if len(num_cols) > 0:
-            stats = df[num_cols].describe().T
-            stats["Opportunity"] = np.where(stats["mean"] < stats["50%"], "Improve low performers", "Maintain high performers")
-            st.dataframe(stats[["mean","50%","Opportunity"]])
-            narratives["Opportunities"] = "Quick wins identified:\n" + stats["Opportunity"].value_counts().to_string()
+    # Scatter Plot
+    st.subheader("🔗 Scatter Plot")
+    x_col = st.selectbox("X-axis", df.columns)
+    y_col = st.selectbox("Y-axis", df.columns, index=min(1, len(df.columns)-1))
+    if x_col and y_col:
+        chart = alt.Chart(df.to_pandas()).mark_circle(size=60, opacity=0.7).encode(x=x_col, y=y_col, tooltip=list(df.columns))
+        st.altair_chart(chart, use_container_width=True)
+        narr = scatter_narrative(df, x_col, y_col)
+        st.markdown(narr)
+        narratives["Scatter Plot"] = narr
 
-    if menu == "Report":
-        st.subheader("📑 Auto-Generated Report")
-        if narratives:
-            for k, v in narratives.items():
-                st.markdown(f"### {k}\n{v}")
-            download_pdf(narratives, figs)
-        else:
-            st.info("Generate insights in other tabs first.")
+    # Correlation Heatmap
+    st.subheader("📈 Correlation Heatmap")
+    num_cols = df.select(pl.col(pl.Float64), pl.col(pl.Int64)).columns
+    if len(num_cols) > 1:
+        corr = df.select(num_cols).to_pandas().corr()
+        fig = px.imshow(corr, text_auto=True, aspect="auto", color_continuous_scale="RdBu_r")
+        st.plotly_chart(fig, use_container_width=True)
+        narr = correlation_narrative(df)
+        st.markdown(narr)
+        narratives["Correlation Heatmap"] = narr
+
+    # Report
+    st.subheader("📑 Export Report")
+    generate_pdf(narratives)
