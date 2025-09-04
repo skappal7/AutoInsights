@@ -24,49 +24,50 @@ from sklearn.linear_model import LinearRegression
 # ---------------------------- Page & Theme ----------------------------
 st.set_page_config(page_title="Auto Insights – CE Innovations Lab", page_icon="🚀", layout="wide")
 
-# Glassmorphism + gradient styles
+# Light theme styling
 st.markdown("""
 <style>
-/* Background gradient */
 .stApp {
-  background: radial-gradient(1200px 800px at 10% 10%, rgba(99,102,241,0.12), transparent 60%),
-              radial-gradient(1200px 800px at 90% 30%, rgba(236,72,153,0.12), transparent 60%),
-              linear-gradient(135deg, #0f172a, #0b1220 60%);
-  color: #eef2ff;
+  background: #ffffff;  /* Pure white background */
+  color: #1f2937;       /* Neutral dark gray text */
 }
-/* Cards */
-.block-container { padding-top: 1.5rem; }
+
+/* Glass cards on white background */
 .glass {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-  backdrop-filter: blur(10px);
-  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  border-radius: 12px;
   padding: 1rem 1.2rem;
   margin-bottom: 1rem;
 }
+
+/* KPI cards */
 .kpi {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.18);
-  border-radius: 16px;
+  background: rgba(249,250,251,0.9);
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 12px;
   padding: 0.8rem 1rem;
   text-align: center;
 }
-.kpi h3 { margin: 0; font-size: 0.9rem; color: #c7d2fe; }
-.kpi p { margin: 0; font-size: 1.3rem; font-weight: 700; color: #e5e7eb; }
+.kpi h3 { margin: 0; font-size: 0.9rem; color: #6b7280; }
+.kpi p { margin: 0; font-size: 1.3rem; font-weight: 700; color: #111827; }
+
+/* Footer */
 footer {visibility: hidden;}
 #custom-footer {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999;
-  background: rgba(17,24,39,0.65);
-  backdrop-filter: blur(6px);
-  border-top: 1px solid rgba(255,255,255,0.12);
-  color: #e5e7eb; padding: 8px 16px; text-align: center; font-size: 0.9rem;
+  background: rgba(255,255,255,0.9);
+  border-top: 1px solid rgba(0,0,0,0.08);
+  color: #374151;
+  padding: 8px 16px; text-align: center; font-size: 0.9rem;
 }
-.smallnote { color: #cbd5e1; font-size: 0.9rem; }
-hr { border-color: rgba(255,255,255,0.15); }
+.smallnote { color: #6b7280; font-size: 0.9rem; }
+hr { border-color: rgba(0,0,0,0.1); }
 </style>
 <div id="custom-footer">Developed by <b>CE Innovations Lab 2025</b></div>
 """, unsafe_allow_html=True)
+
 
 # ---------------------------- Session Helpers ----------------------------
 if "charts_png" not in st.session_state:
