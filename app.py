@@ -735,4 +735,6 @@ def main():
                 st.download_button(
                     label="📥 Download Visualizations",
                     data=viz_zip,
-                    file_name=f"visualizations_{datetime.now().strftime('%Y%m%d_%H%M%S')
+                    file_name=f"visualizations_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+                )
+
