@@ -2,7 +2,6 @@
 # 🚀 Auto Insights — V5 (Storytelling + Scalable + Beautiful)
 # Python 3.11+ compatible
 
-import csv
 import os
 import io
 import zipfile
@@ -20,6 +19,7 @@ from plotly.io import to_image
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.feature_selection import mutual_info_regression
 from sklearn.linear_model import LinearRegression
+import csv
 
 # ---------------------------- Page & Theme ----------------------------
 st.set_page_config(page_title="Auto Insights – CE Innovations Lab", page_icon="🚀", layout="wide")
